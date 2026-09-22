@@ -1,9 +1,10 @@
 
-name: Publish Neon Store
+name: Deploy Neon Store Catalog
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "apps/**"
       - ".github/workflows/publish-store.yml"
@@ -15,12 +16,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: neon-store-publish
+  group: neon-store-pages
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,120 +34,166 @@ jobs:
 
       - name: Build app packages and catalog
         env:
-          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           python - <<'PY'
-          import os, json, re, zipfile
-          from pathlib import Path
+          import json
+          import os
+          import pathlib
+          import zipfile
+          import subprocess
 
-          root = Path("apps")
-          dist = Path("dist")
+          root = pathlib.Path(".")
+          apps_dir = root / "apps"
+          dist = root / "dist"
+          site = root / "site"
+
           dist.mkdir(exist_ok=True)
-          catalog = {
-              "schema": "neonos.store.v1",
-              "apps": []
-          }
+          site.mkdir(exist_ok=True)
 
-          repo = os.environ["REPOSITORY"]
-          manifests = sorted(root.glob("*/manifest.json")) if root.exists() else []
+          catalog = []
 
-          for mf in manifests:
-              folder = mf.parent
-              data = json.loads(mf.read_text(encoding="utf-8"))
+          for manifest_path in sorted(apps_dir.glob("*/manifest.json")):
+              app_dir = manifest_path.parent
 
-              for key in ("schema", "id", "name", "version", "entry"):
-                  if not data.get(key):
-                      raise ValueError(f"{mf}: missing {key}")
+              with manifest_path.open(encoding="utf-8") as f:
+                  manifest = json.load(f)
 
-              if data["schema"] != "neonos.app.v1":
-                  raise ValueError(f"{mf}: unsupported schema")
+              required = ["schema", "id", "name", "version", "entry"]
+              for key in required:
+                  if not manifest.get(key):
+                      raise ValueError(
+                          f"{manifest_path}: missing {key}"
+                      )
 
-              app_id = data["id"]
-              version = str(data["version"])
+              if manifest["schema"] != "neonos.app.v1":
+                  raise ValueError(
+                      f"{manifest_path}: unsupported schema"
+                  )
 
-              if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", app_id):
-                  raise ValueError(f"{mf}: invalid app id")
+              app_id = manifest["id"]
+              version = str(manifest["version"])
+              entry = pathlib.PurePosixPath(manifest["entry"])
 
-              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]*", version):
-                  raise ValueError(f"{mf}: invalid version")
+              if entry.is_absolute() or ".." in entry.parts:
+                  raise ValueError(
+                      f"{manifest_path}: invalid entry path"
+                  )
 
-              entry = (folder / data["entry"]).resolve()
-              if not entry.is_relative_to(folder.resolve()) or not entry.is_file():
-                  raise ValueError(f"{mf}: invalid or missing entry file")
+              if not (app_dir / str(entry)).is_file():
+                  raise ValueError(
+                      f"{manifest_path}: entry file not found"
+                  )
+
+              if any(item["id"] == app_id for item in catalog):
+                  raise ValueError(f"Duplicate app ID: {app_id}")
+
+              zip_path = dist / f"{app_id}.zip"
+
+              with zipfile.ZipFile(
+                  zip_path, "w", zipfile.ZIP_DEFLATED
+              ) as archive:
+                  for file in app_dir.rglob("*"):
+                      if file.is_file():
+                          archive.write(
+                              file,
+                              file.relative_to(app_dir.parent)
+                          )
 
               tag = f"app-{app_id}-v{version}"
-              archive = dist / f"{app_id}.zip"
+              repo = os.environ["GH_REPO"]
 
-              with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
-                  for file in folder.rglob("*"):
-                      if file.is_symlink():
-                          raise ValueError(f"Symlink not allowed: {file}")
-                      if file.is_file():
-                          z.write(file, file.relative_to(folder))
+              release_url = (
+                  f"https://github.com/{repo}/releases/download/"
+                  f"{tag}/{app_id}.zip"
+              )
+
+              # Create the release if it doesn't exist.
+              result = subprocess.run(
+                  ["gh", "release", "view", tag],
+                  stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL
+              )
+
+              if result.returncode == 0:
+                  subprocess.run(
+                      [
+                          "gh", "release", "upload", tag,
+                          str(zip_path), "--clobber"
+                      ],
+                      check=True
+                  )
+              else:
+                  subprocess.run(
+                      [
+                          "gh", "release", "create", tag,
+                          str(zip_path),
+                          "--title", f"{manifest['name']} {version}",
+                          "--notes", f"NeonOS app release {version}"
+                      ],
+                      check=True
+                  )
 
               item = {
                   "id": app_id,
-                  "name": data["name"],
+                  "name": manifest["name"],
                   "version": version,
-                  "description": data.get("description", ""),
-                  "author": data.get("author", ""),
-                  "download": (
-                      f"https://github.com/{repo}/releases/download/"
-                      f"{tag}/{app_id}.zip"
-                  )
+                  "description": manifest.get("description", ""),
+                  "author": manifest.get("author", ""),
+                  "download": release_url,
+                  "manifest": manifest
               }
 
-              icon = data.get("icon", {})
+              icon = manifest.get("icon", {})
               if isinstance(icon, dict) and icon.get("src"):
-                  item["icon"] = (
-                      f"https://raw.githubusercontent.com/{repo}/main/"
-                      f"{folder.as_posix()}/{icon['src']}"
-                  )
+                  icon_path = pathlib.PurePosixPath(icon["src"])
+                  if not icon_path.is_absolute() and ".." not in icon_path.parts:
+                      item["icon"] = (
+                          f"https://raw.githubusercontent.com/{repo}/main/"
+                          f"{app_dir.as_posix()}/{icon_path.as_posix()}"
+                      )
 
-              if data.get("window"):
-                  item["window"] = data["window"]
+              catalog.append(item)
 
-              catalog["apps"].append(item)
-
-              with open(dist / f"{app_id}.release", "w") as f:
-                  f.write(tag + "\n")
-                  f.write(item["name"] + "\n")
-                  f.write(version + "\n")
-
-          (dist / "catalog.json").write_text(
-              json.dumps(catalog, indent=2), encoding="utf-8"
+          (site / "catalog.json").write_text(
+              json.dumps(
+                  {
+                      "schema": "neonos.store.v1",
+                      "apps": catalog
+                  },
+                  indent=2
+              ),
+              encoding="utf-8"
           )
-          print(f"Catalog built with {len(catalog['apps'])} app(s)")
+
+          # A simple landing page confirms Pages is working.
+          (site / "index.html").write_text(
+              "<!doctype html><html><head>"
+              "<meta charset='utf-8'>"
+              "<title>Neon Store Catalog</title></head>"
+              "<body><h1>Neon Store Catalog</h1>"
+              "<p>Catalog: <a href='catalog.json'>catalog.json</a></p>"
+              "</body></html>",
+              encoding="utf-8"
+          )
+
+          print(f"Catalog built with {len(catalog)} app(s).")
           PY
 
-      - name: Publish app releases
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for meta in dist/*.release; do
-            [ -f "$meta" ] || continue
-
-            mapfile -t info < "$meta"
-            tag="${info[0]}"
-            name="${info[1]}"
-            version="${info[2]}"
-            id="${tag#app-}"
-            id="${id%-v$version}"
-            zip="dist/${id}.zip"
-
-            if gh release view "$tag" >/dev/null 2>&1; then
-              gh release upload "$tag" "$zip" --clobber
-            else
-              gh release create "$tag" "$zip" \
-                --title "$name $version" \
-                --notes "NeonOS app package: $name"
-            fi
-          done
-
-      - name: Upload catalog for GitHub Pages
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
       - name: Deploy Neon Store catalog
+        id: deployment
         uses: actions/deploy-pages@v4
