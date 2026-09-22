@@ -1,0 +1,151 @@
+
+name: Publish Neon Store
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - ".github/workflows/publish-store.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: neon-store-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build app packages and catalog
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import os, json, re, zipfile
+          from pathlib import Path
+
+          root = Path("apps")
+          dist = Path("dist")
+          dist.mkdir(exist_ok=True)
+          catalog = {
+              "schema": "neonos.store.v1",
+              "apps": []
+          }
+
+          repo = os.environ["REPOSITORY"]
+          manifests = sorted(root.glob("*/manifest.json")) if root.exists() else []
+
+          for mf in manifests:
+              folder = mf.parent
+              data = json.loads(mf.read_text(encoding="utf-8"))
+
+              for key in ("schema", "id", "name", "version", "entry"):
+                  if not data.get(key):
+                      raise ValueError(f"{mf}: missing {key}")
+
+              if data["schema"] != "neonos.app.v1":
+                  raise ValueError(f"{mf}: unsupported schema")
+
+              app_id = data["id"]
+              version = str(data["version"])
+
+              if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", app_id):
+                  raise ValueError(f"{mf}: invalid app id")
+
+              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]*", version):
+                  raise ValueError(f"{mf}: invalid version")
+
+              entry = (folder / data["entry"]).resolve()
+              if not entry.is_relative_to(folder.resolve()) or not entry.is_file():
+                  raise ValueError(f"{mf}: invalid or missing entry file")
+
+              tag = f"app-{app_id}-v{version}"
+              archive = dist / f"{app_id}.zip"
+
+              with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+                  for file in folder.rglob("*"):
+                      if file.is_symlink():
+                          raise ValueError(f"Symlink not allowed: {file}")
+                      if file.is_file():
+                          z.write(file, file.relative_to(folder))
+
+              item = {
+                  "id": app_id,
+                  "name": data["name"],
+                  "version": version,
+                  "description": data.get("description", ""),
+                  "author": data.get("author", ""),
+                  "download": (
+                      f"https://github.com/{repo}/releases/download/"
+                      f"{tag}/{app_id}.zip"
+                  )
+              }
+
+              icon = data.get("icon", {})
+              if isinstance(icon, dict) and icon.get("src"):
+                  item["icon"] = (
+                      f"https://raw.githubusercontent.com/{repo}/main/"
+                      f"{folder.as_posix()}/{icon['src']}"
+                  )
+
+              if data.get("window"):
+                  item["window"] = data["window"]
+
+              catalog["apps"].append(item)
+
+              with open(dist / f"{app_id}.release", "w") as f:
+                  f.write(tag + "\n")
+                  f.write(item["name"] + "\n")
+                  f.write(version + "\n")
+
+          (dist / "catalog.json").write_text(
+              json.dumps(catalog, indent=2), encoding="utf-8"
+          )
+          print(f"Catalog built with {len(catalog['apps'])} app(s)")
+          PY
+
+      - name: Publish app releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for meta in dist/*.release; do
+            [ -f "$meta" ] || continue
+
+            mapfile -t info < "$meta"
+            tag="${info[0]}"
+            name="${info[1]}"
+            version="${info[2]}"
+            id="${tag#app-}"
+            id="${id%-v$version}"
+            zip="dist/${id}.zip"
+
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "$zip" --clobber
+            else
+              gh release create "$tag" "$zip" \
+                --title "$name $version" \
+                --notes "NeonOS app package: $name"
+            fi
+          done
+
+      - name: Upload catalog for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy Neon Store catalog
+        uses: actions/deploy-pages@v4
