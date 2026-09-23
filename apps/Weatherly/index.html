@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weatherly — Weather Dashboard</title>
+<style>
+:root{--bg:#0b1220;--panel:#131e30;--panel2:#1a2940;--text:#eef5ff;--muted:#9aacc5;--accent:#75c9ff;--line:#263852}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#172d49 0,#0b1220 55%);color:var(--text);font:15px/1.5 Inter,system-ui,Segoe UI,Arial,sans-serif;min-height:100vh}
+main{max-width:1180px;margin:auto;padding:28px 20px 50px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.brand{font-size:24px;font-weight:800;letter-spacing:-.8px}.brand span{color:var(--accent)}.search{display:flex;gap:8px;flex:1;max-width:600px}
+input,button{font:inherit;border:1px solid var(--line);border-radius:12px;padding:12px 15px}input{background:#0d1828;color:var(--text);flex:1;min-width:100px;outline:none}input:focus{border-color:var(--accent)}button{background:var(--panel2);color:var(--text);cursor:pointer;transition:.2s}button:hover{filter:brightness(1.2);transform:translateY(-1px)}.primary{background:var(--accent);color:#092035;border-color:transparent;font-weight:700}
+.toolbar{display:flex;gap:8px}.error{color:#ffb4b4;margin:8px 0;min-height:20px}.muted{color:var(--muted)}.section-title{font-size:17px;margin:0 0 14px;font-weight:700}
+.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}.panel{background:linear-gradient(145deg,rgba(26,41,64,.96),rgba(16,27,44,.96));border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 14px 35px #0002;min-width:0}
+.current{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.place{font-size:24px;font-weight:750}.date{color:var(--muted)}.temp{font-size:64px;line-height:1.1;font-weight:750;letter-spacing:-3px}.condition{font-size:18px}.weather-icon{font-size:68px;filter:drop-shadow(0 8px 15px #0003)}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px}.stat{background:#0d1929a8;border:1px solid #263852;border-radius:13px;padding:12px}.stat small{display:block;color:var(--muted);margin-bottom:5px}.stat b{font-size:17px}
+.hourly{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.hour{background:#0d1929a8;border:1px solid #263852;border-radius:14px;min-width:82px;text-align:center;padding:12px 8px}.hour .ico{font-size:24px;margin:8px 0}.hour b{display:block}.hour small{color:var(--muted)}
+.daily{display:grid;gap:8px}.day{display:grid;grid-template-columns:1.2fr 40px 1fr auto;align-items:center;gap:10px;padding:10px 12px;background:#0d1929a8;border:1px solid #263852;border-radius:12px}.dayname{font-weight:650}.dayicon{text-align:center;font-size:22px}.bar{height:6px;border-radius:9px;background:#293c55;overflow:hidden}.bar span{display:block;height:100%;background:linear-gradient(90deg,#73caff,#ffd16b);border-radius:9px}.range{display:flex;align-items:center;gap:9px;min-width:95px}.range small{color:var(--muted)}.wide{grid-column:1/-1}.footer{text-align:center;color:#7187a4;font-size:12px;margin-top:24px}
+@media(max-width:760px){main{padding:18px 12px 35px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.panel{padding:17px}.temp{font-size:54px}.stats{grid-template-columns:repeat(2,1fr)}.day{grid-template-columns:1fr 30px 1fr auto;padding:9px 8px;font-size:13px}.range{min-width:80px;gap:5px}}
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+  <div class="brand">☁ Weather<span>ly</span></div>
+  <form class="search" id="searchForm">
+    <input id="cityInput" placeholder="Search a city (e.g. Lagos)" aria-label="City name" autocomplete="off">
+    <button class="primary" type="submit">Search</button>
+  </form>
+  <div class="toolbar"><button id="geoBtn" title="Use my location">◎ Locate</button><button id="unitBtn" title="Switch temperature units">°C / °F</button></div>
+</header>
+<div class="error" id="error" role="status"></div>
+<div class="grid">
+  <section class="panel">
+    <div class="current">
+      <div><div class="place" id="place">Lagos, Nigeria</div><div class="date" id="date"></div><div class="temp" id="temp">--°</div><div class="condition" id="condition">Loading weather…</div><div class="muted" id="feels"></div></div>
+      <div class="weather-icon" id="bigIcon">🌤️</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><small>💧 Humidity</small><b id="humidity">--%</b></div>
+      <div class="stat"><small>💨 Wind</small><b id="wind">-- km/h</b></div>
+      <div class="stat"><small>🌡️ Feels like</small><b id="feelsStat">--°</b></div>
+      <div class="stat"><small>🌧️ Precipitation</small><b id="rain">-- mm</b></div>
+      <div class="stat"><small>☀️ UV index</small><b id="uv">--</b></div>
+      <div class="stat"><small>🌅 Sunrise</small><b id="sunrise">--:--</b></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2 class="section-title">Next 24 hours</h2>
+    <div class="hourly" id="hourly"><span class="muted">Loading hourly forecast…</span></div>
+  </section>
+  <section class="panel wide">
+    <h2 class="section-title">7-day forecast</h2>
+    <div class="daily" id="daily"><span class="muted">Loading daily forecast…</span></div>
+  </section>
+</div>
+<div class="footer">Weather data by Open-Meteo · No API key required</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let isF=false, current={lat:6.5244,lon:3.3792,name:"Lagos",country:"Nigeria"};
+const codes={
+  0:["Clear sky","☀️"],1:["Mainly clear","🌤️"],2:["Partly cloudy","⛅"],3:["Overcast","☁️"],
+  45:["Fog","🌫️"],48:["Depositing rime fog","🌫️"],51:["Light drizzle","🌦️"],53:["Drizzle","🌦️"],55:["Dense drizzle","🌧️"],
+  56:["Freezing drizzle","🌧️"],57:["Heavy freezing drizzle","🌧️"],61:["Slight rain","🌦️"],63:["Moderate rain","🌧️"],65:["Heavy rain","🌧️"],
+  66:["Freezing rain","🌧️"],67:["Heavy freezing rain","🌧️"],71:["Slight snow","🌨️"],73:["Moderate snow","🌨️"],75:["Heavy snow","❄️"],
+  77:["Snow grains","🌨️"],80:["Rain showers","🌦️"],81:["Moderate showers","🌧️"],82:["Violent showers","⛈️"],85:["Snow showers","🌨️"],86:["Heavy snow showers","❄️"],
+  izzle:["Thunderstorm","⛈️"],95:["Thunderstorm","⛈️"],96:["Thunderstorm with hail","⛈️"],99:["Thunderstorm with heavy hail","⛈️"]
+};
+function weather(code){return codes[code]||["Weather conditions","🌡️"]}
+function temp(c){return Math.round(isF?c*9/5+32:c)+"°"}
+function wind(v){return `${Math.round(v*(isF?0.621371:1))} ${isF?"mph":"km/h"}`}
+function time(s){return s?new Date(s).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"--:--"}
+function day(s,i){return i===0?"Today":new Date(s+"T12:00:00").toLocaleDateString([],{weekday:"short"})}
+async function loadWeather(){
+  $("error").textContent="";
+  $("place").textContent=current.name+(current.country?", "+current.country:"");
+  $("condition").textContent="Fetching latest forecast…";
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${current.lat}&longitude=${current.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto`;
+    const res=await fetch(url);if(!res.ok)throw Error("Weather service returned an error.");const d=await res.json();
+    const c=d.current, w=weather(c.weather_code);
+    $("date").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+    $("temp").textContent=temp(c.temperature_2m);$("condition").textContent=w[0];$("bigIcon").textContent=w[1];
+    $("humidity").textContent=c.relative_humidity_2m+"%";$("wind").textContent=wind(c.wind_speed_10m);
+    $("feels").textContent="Feels like "+temp(c.apparent_temperature);$("feelsStat").textContent=temp(c.apparent_temperature);
+    $("rain").textContent=c.precipitation+" mm";$("uv").textContent=d.daily.uv_index_max[0]??"--";
+    $("sunrise").textContent=time(d.daily.sunrise[0]);
+    const now=new Date(c.time).getTime(), start=d.hourly.time.findIndex(t=>new Date(t).getTime()>=now);
+    $("hourly").innerHTML=Array.from({length:24},(_,i)=>start+i).filter(i=>i<d.hourly.time.length).map(i=>{
+      const hw=weather(d.hourly.weather_code[i]);
+      return `<div class="hour"><small>${i===start?"Now":time(d.hourly.time[i])}</small><div class="ico">${hw[1]}</div><b>${temp(d.hourly.temperature_2m[i])}</b><small>💧 ${d.hourly.precipitation_probability[i]??0}%</small></div>`
+    }).join("");
+    const lows=d.daily.temperature_2m_min, highs=d.daily.temperature_2m_max, min=Math.min(...lows),max=Math.max(...highs),span=max-min||1;
+    $("daily").innerHTML=d.daily.time.map((date,i)=>{
+      const dw=weather(d.daily.weather_code[i]),left=((lows[i]-min)/span)*100,width=Math.max(5,((highs[i]-lows[i])/span)*100);
+      return `<div class="day"><div class="dayname">${day(date,i)}<div class="muted">${dw[0]}</div></div><div class="dayicon">${dw[1]}</div><div class="bar"><span style="margin-left:${left}%;width:${width}%"></span></div><div class="range"><small>${temp(lows[i])}</small><b>${temp(highs[i])}</b></div></div>`
+    }).join("");
+  }catch(e){$("condition").textContent="Could not load weather";$("error").textContent="Check your internet connection and try again."}
+}
+async function searchCity(name){
+  if(!name.trim())return;
+  $("error").textContent="Searching…";
+  try{
+    const r=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+    const d=await r.json();if(!d.results?.length)throw Error("City not found");
+    const p=d.results[0];current={lat:p.latitude,lon:p.longitude,name:p.name,country:p.country||""};$("cityInput").value="";loadWeather();
+  }catch(e){$("error").textContent="City not found. Try another city name."}
+}
+$("searchForm").addEventListener("submit",e=>{e.preventDefault();searchCity($("cityInput").value)});
+$("unitBtn").addEventListener("click",()=>{isF=!isF;$("unitBtn").textContent=isF?"Switch to °C":"Switch to °F";loadWeather()});
+$("geoBtn").addEventListener("click",()=>{
+  if(!navigator.geolocation){$("error").textContent="Geolocation is not supported by this browser.";return}
+  $("error").textContent="Finding your location…";
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    current={lat:pos.coords.latitude,lon:pos.coords.longitude,name:"Your location",country:""};
+    try{const r=await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${current.lat}&longitude=${current.lon}&language=en&format=json`);const d=await r.json();if(d.results?.[0]){current.name=d.results[0].name;current.country=d.results[0].country||""}}catch{}
+    loadWeather();
+  },()=>{$("error").textContent="Location permission was denied or unavailable."},{timeout:10000});
+});
+loadWeather();
+</script>
+</body>
+</html>
