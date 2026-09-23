@@ -1,0 +1,11 @@
+{
+  "schema": "neonos.app.v1",
+  "id": "neon-notes",
+  "name": "Neon Notes",
+  "version": "1.1.0",
+  "description": "Local-first notes with folders, daily notes, task tracking, quick capture, backup and accent sync.",
+  "author": "James",
+  "entry": "index.html",
+  "window": {"width": 1100, "height": 760, "resizable": true},
+  "permissions": []
+}
