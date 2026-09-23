@@ -1,1 +1,124 @@
-hdhdnd
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Notes</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Neon Notes home">
+        <span class="brand-mark">N</span>
+        <span>Neon <b>Notes</b></span>
+      </a>
+
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="searchInput" type="search" placeholder="Search notes..." aria-label="Search notes" />
+        <kbd>Ctrl K</kbd>
+        <button id="clearSearchBtn" class="clear-search" type="button" aria-label="Clear search" title="Clear search">×</button>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">☼</button>
+        <label class="accent-control" title="Custom accent color">◉<input id="accentPicker" type="color" value="#7c3cff" aria-label="Choose accent color"></label>
+        <button class="icon-btn" id="commandBtn" title="Command palette (Ctrl+K)" aria-label="Open command palette">⌘</button>
+        <button class="avatar" title="Single-user profile">J</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar">
+        <nav class="nav-main">
+          <button class="nav-item active" data-filter="all"><span class="nav-icon">▤</span><span>All Notes</span><span class="count" id="allCount">0</span></button>
+          <button class="nav-item" data-filter="pinned"><span class="nav-icon pin-color">◆</span><span>Pinned</span><span class="count" id="pinnedCount">0</span></button>
+        </nav>
+
+        <div class="side-heading">
+          <span class="nav-icon tag-color">◆</span>
+          <span>Categories</span>
+          <button id="categoryToggle" class="tiny-btn" aria-label="Toggle categories">⌄</button>
+        </div>
+        <div id="categoryList" class="category-list"></div>
+        <button id="addCategoryBtn" class="add-category"><span>＋</span> New Category</button>
+
+        <div class="storage-card">
+          <span class="db-icon">▤</span>
+          <div><strong>Local workspace</strong><small id="storageStatus">Connecting to IndexedDB…</small></div>
+          <span class="status-dot"></span>
+        </div>
+      </aside>
+
+      <section class="notes-column">
+        <button id="newNoteBtn" class="new-note-btn"><span>＋</span> New Note</button>
+        <div class="list-controls"><label>Sort <select id="sortSelect"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="oldest">Oldest updated</option><option value="title">Title A–Z</option></select></label><label>Tag <select id="tagFilter"><option value="">All tags</option></select></label><button id="backupBtn" class="secondary-btn backup-btn" type="button">Backup ↕</button><div class="view-switch" aria-label="Notes view"><button data-view="grid" class="active" title="Grid view">▦</button><button data-view="list" title="List view">☰</button><button data-view="compact" title="Compact view">≡</button></div></div>
+        <div class="list-heading"><span id="listTitle">All Notes</span><span id="visibleCount"></span></div>
+        <div id="notesList" class="notes-list"></div>
+        <div id="emptyState" class="empty-state hidden">
+          <div class="empty-icon">✦</div>
+          <strong>No notes found</strong>
+          <p>Create a note or try a different search.</p>
+        </div>
+      </section>
+
+      <div id="editorBackdrop" class="editor-backdrop hidden" aria-hidden="true"></div>
+      <section class="editor-panel" id="editorPanel" role="dialog" aria-modal="true" aria-label="Note editor">
+        <div class="editor-toolbar">
+          <div class="editor-status" id="editorStatus">LOCAL DRAFT</div>
+          <div class="editor-actions">
+            <button id="closeEditorBtn" class="tool-btn close-editor" type="button" title="Close editor" aria-label="Close editor">×</button>
+            <button id="pinBtn" class="tool-btn" title="Pin note" aria-label="Pin note">◆</button>
+            <button id="categoryBtn" class="tool-btn" title="Change category" aria-label="Change category">◇</button>
+            <button id="deleteBtn" class="tool-btn danger" title="Delete note" aria-label="Delete note">⋯</button>
+            <button id="saveBtn" class="save-btn">Save</button>
+          </div>
+        </div>
+
+        <div id="editorEmpty" class="editor-empty hidden">
+          <div class="empty-logo">N</div>
+          <h2>Your next great idea starts here.</h2>
+          <p>Select a note or create a new one.</p>
+          <button class="new-note-btn compact" id="emptyNewBtn">＋ New Note</button>
+        </div>
+
+        <article id="noteEditor" class="note-editor">
+          <input id="noteTitle" class="note-title" placeholder="Untitled note" maxlength="120" aria-label="Note title" />
+          <div class="note-meta">
+            <span class="category-pill"><i id="categoryDot"></i><span id="currentCategory">General</span></span>
+            <span id="createdMeta">Created just now</span>
+            <span id="updatedMeta">Edited just now</span>
+            <label class="tags-field">Tags <input id="tagsInput" placeholder="coding, ideas (comma separated)" aria-label="Note tags"></label>
+          </div>
+          <div class="editor-divider"></div>
+          <div class="format-toolbar" aria-label="Text formatting"><button type="button" data-format="bold"><b>B</b></button><button type="button" data-format="italic"><i>I</i></button><button type="button" data-format="underline"><u>U</u></button><button type="button" data-format="insertUnorderedList">• List</button><button type="button" data-format="insertOrderedList">1. List</button><button type="button" data-format="formatBlock" data-block="h2">H</button><label title="Text color">A<input id="formatColor" type="color" value="#c4d7f4" aria-label="Text color"></label></div>
+          <div id="noteBody" class="note-body" contenteditable="true" data-placeholder="Start writing something brilliant..." aria-label="Note content"></div>
+          <div class="editor-footer">
+            <span><span class="footer-spark">✦</span> Your ideas, your space.</span>
+            <span id="wordCount">0 words</span>
+          </div>
+        </article>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="status"></div>
+    <dialog id="categoryDialog" class="modal">
+      <form method="dialog" id="categoryForm">
+        <div class="modal-head"><h3>New category</h3><button class="tiny-btn" value="cancel" aria-label="Close">✕</button></div>
+        <p>Give your notes a new place to live.</p>
+        <input id="categoryNameInput" class="modal-input" placeholder="Category name" maxlength="24" />
+        <div class="modal-actions"><button class="secondary-btn" value="cancel">Cancel</button><button id="createCategoryBtn" class="save-btn" value="default">Create category</button></div>
+      </form>
+    </dialog>
+    <dialog id="categoryPickDialog" class="modal">
+      <form method="dialog">
+        <div class="modal-head"><h3>Move to category</h3><button class="tiny-btn" value="cancel" aria-label="Close">✕</button></div>
+        <div id="categoryOptions" class="category-options"></div>
+      </form>
+    </dialog>
+    <dialog id="commandDialog" class="modal command-modal"><div class="modal-head"><h3>Command palette</h3><button id="closeCommand" class="tiny-btn" type="button" aria-label="Close" onclick="document.getElementById('commandDialog').close()">✕</button></div><input id="commandInput" class="modal-input" placeholder="Type a command…" autocomplete="off"><div id="commandResults" class="command-results"></div></dialog>
+    <dialog id="backupDialog" class="modal"><p>Backup and restore your notes using JSON files.</p><button id="exportBtn" class="save-btn" type="button">Export backup</button><button id="importBtn" class="secondary-btn" type="button">Import backup</button><input id="importFile" type="file" accept="application/json,.json" hidden></dialog>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
