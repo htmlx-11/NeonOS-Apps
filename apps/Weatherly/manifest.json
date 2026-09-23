@@ -1,0 +1,15 @@
+{
+  "schema": "neonos.app.v1",
+  "id": "weather-app",
+  "name": "Weather App",
+  "version": "1.0.0",
+  "description": "Interactive weather and geospatial visualization app with forecast graphs, map layers, and vessel data.",
+  "author": "James",
+  "entry": "index.html",
+  "window": {
+    "width": 1000,
+    "height": 700,
+    "resizable": true
+  },
+  "permissions": []
+}
